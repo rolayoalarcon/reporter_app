@@ -1,0 +1,13 @@
+name: reporter_selection_app
+title: reporter_selection_app
+username:
+account: rolayo
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4156393
+bundleId: 4617908
+url: https://rolayo.shinyapps.io/reporter_selection_app/
+when: 1621462043.38352
+lastSyncTime: 1621462043.38354
+asMultiple: FALSE
+asStatic: FALSE

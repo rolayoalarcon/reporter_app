@@ -38,6 +38,9 @@ ui <- fluidPage(title = "Choosing gene expression",
                              sidebarPanel(numericInput(inputId = "cluster_interest_cds",
                                                        label = "Focus on Cluster:",
                                                        value=1, min=1),
+                                          selectInput(inputId = "organism_interest_cds",
+                                                      label = "Show:",
+                                                      choices = c("Both organisms", "Only Salmonella", "Only Campylobacter")),
                                           textInput(inputId = "gene_interest_cds",
                                                     label="Highlight Gene (if more than one, separate with comma)",
                                                     value = "None"),
@@ -80,6 +83,9 @@ ui <- fluidPage(title = "Choosing gene expression",
                              sidebarPanel(numericInput(inputId = "cluster_interest_srna",
                                                        label = "Focus on Cluster:",
                                                        value=1, min=1),
+                                          selectInput(inputId = "organism_interest_srna",
+                                                      label = "Show:",
+                                                      choices = c("Both organisms", "Only Salmonella", "Only Campylobacter")),
                                           textInput(inputId = "gene_interest_srna",
                                                     label="Highlight Gene (if more than one, separate with comma)",
                                                     value = "None"),
@@ -383,31 +389,47 @@ server <- function(input, output){
   # Focused Data Parameters
   ## CDS
   focus_parameters_cds <- reactiveValues(c_focus = 1,
-                                         g_focus = c("None"))
+                                         g_focus = c("None"),
+                                         o_focus = "Both organisms")
   
   ## sRNA
   focus_parameters_srna <- reactiveValues(c_focus = 1,
-                                          g_focus = c("None"))
+                                          g_focus = c("None"),
+                                          o_focus = "Both organisms")
   
   # Update Focused Parameters
   ## CDS
   observeEvent(input$focus_param_cds, {
     focus_parameters_cds$c_focus <- input$cluster_interest_cds
     focus_parameters_cds$g_focus <- strsplit(input$gene_interest_cds, ",")[[1]]
+    focus_parameters_cds$o_focus <- input$organism_interest_cds
   })
   
   ## sRNA
   observeEvent(input$focus_param_srna, {
     focus_parameters_srna$c_focus <- input$cluster_interest_srna
     focus_parameters_srna$g_focus <- strsplit(input$gene_interest_srna, ",")[[1]]
+    focus_parameters_srna$o_focus <- input$organism_interest_srna
   })
   
   
   # Focused Plot
   ## CDS
   output$focus_profile_cds <- renderPlotly({
-    f.df <- cluster_info_cds() %>% 
-      filter(cluster == focus_parameters_cds$c_focus)
+    
+    if(focus_parameters_cds$o_focus == "Both organisms"){
+      f.df <- cluster_info_cds() %>% 
+        filter(cluster == focus_parameters_cds$c_focus) 
+      
+    }else if(focus_parameters_cds$o_focus == "Only Salmonella"){
+      f.df <- cluster_info_cds() %>% 
+        filter(cluster == focus_parameters_cds$c_focus) %>% 
+        filter(organism == "Salmonella")
+    }else if(focus_parameters_cds$o_focus == "Only Campylobacter"){
+      f.df <- cluster_info_cds() %>% 
+        filter(cluster == focus_parameters_cds$c_focus) %>% 
+        filter(organism == "Campylobacter")
+    }
     
     f.plot <- ggplot(f.df, aes(x=Condition, y=logFC, group=gene_name)) +
                          geom_line(color=alpha("darkgrey", 0.5))
@@ -422,8 +444,20 @@ server <- function(input, output){
   
   ## sRNA
   output$focus_profile_srna <- renderPlotly({
-    f.df <- cluster_info_srna() %>% 
-      filter(cluster == focus_parameters_srna$c_focus)
+    
+    if(focus_parameters_srna$o_focus == "Both organisms"){
+      f.df <- cluster_info_srna() %>% 
+        filter(cluster == focus_parameters_srna$c_focus) 
+      
+    }else if(focus_parameters_srna$o_focus == "Only Salmonella"){
+      f.df <- cluster_info_srna() %>% 
+        filter(cluster == focus_parameters_srna$c_focus) %>% 
+        filter(organism == "Salmonella")
+    }else if(focus_parameters_srna$o_focus == "Only Campylobacter"){
+      f.df <- cluster_info_srna() %>% 
+        filter(cluster == focus_parameters_srna$c_focus) %>% 
+        filter(organism == "Campylobacter")
+    }
     
     f.plot <- ggplot(f.df, aes(x=Condition, y=logFC, group=gene_name)) +
       geom_line(color=alpha("darkgrey", 0.5))
@@ -443,8 +477,20 @@ server <- function(input, output){
     f.df <- cluster_info_cds() %>% 
       filter(cluster == focus_parameters_cds$c_focus)
     
-    genomic_features %>% 
-      filter(gene_name %in% f.df$gene_name)
+    
+    g_feat <- genomic_features %>% 
+      filter(gene_name %in% f.df$gene_name) %>% 
+      mutate("Pre-selected"=if_else(gene_name %in% sussane.df$gene_name, "Pre-selected", ""))
+    
+    if(clustering_parameters_srna$c_method == "minmax"){
+      gprototypes <- f.df %>% filter(prototype=="Prototype")
+      
+      g_feat <- g_feat %>% 
+        mutate("Prototype" = if_else(gene_name %in% gprototypes$gene_name, "Prototype", ""))
+    }
+    
+    g_feat
+    
   })
   
   ## sRNA
@@ -452,8 +498,17 @@ server <- function(input, output){
     f.df <- cluster_info_srna() %>% 
       filter(cluster == focus_parameters_srna$c_focus)
     
-    genomic_features %>% 
-      filter(gene_name %in% f.df$gene_name)
+    
+    g_feat <- genomic_features %>% 
+      filter(gene_name %in% f.df$gene_name) %>% 
+      mutate("Pre-selected"=if_else(gene_name %in% sussane.df$gene_name, "Pre-selected", ""))
+    
+    if(clustering_parameters_srna$c_method == "minmax"){
+      gprototypes <- f.df %>% filter(prototype=="Prototype")
+      
+      g_feat <- g_feat %>% 
+        mutate("Prototype" = if_else(gene_name %in% gprototypes$gene_name, "Prototype", ""))
+    }
   })
   
 }

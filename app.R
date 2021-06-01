@@ -44,8 +44,27 @@ ui <- fluidPage(title = "Choosing gene expression",
                                                           "Salmonella pre-selection",
                                                           "Campylobacter pre-selection"))
                              ),
-                             mainPanel(plotOutput("cluster_wrap_cds"))
-                             
+                             mainPanel(plotOutput("cluster_wrap_cds"),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br(),
+                                       br()),
                            ),
                            sidebarLayout(
                              sidebarPanel(numericInput(inputId = "cluster_interest_cds",
@@ -325,7 +344,7 @@ server <- function(input, output){
                     plot_according_to = input$color_by_cds,
                     salmonella_preselection = salm.preselection, 
                     campylobacter_preselection = camp.preselection)
-  })
+  }, height = 750)
   
   ## sRNA
   output$cluster_wrap_srna <- renderPlot({

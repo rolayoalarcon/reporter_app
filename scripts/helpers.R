@@ -3,8 +3,6 @@
 library(tidyverse)
 library(protoclust)
 library(plotly)
-library(readxl)
-
 
 
 # A function that decides the matrix and then runs the correlated distance function
@@ -42,8 +40,8 @@ correlated_distance <- function(X, method=c("cosine", "pearson"), expect_neg_dis
     sim <- sim %*% t(sim)
     diag(sim) <- 1 # R is a little inefficient sometimes
     
-  }else if(method=="pearson"){
-    sim <- cor(X, method = "pearson")
+  }else{
+    sim <- cor(X, method = method)
   }
   
   dist.mat <- 1 - sim
@@ -113,7 +111,7 @@ plot_wss <- function(clustered_object, what_was_clustered, how_was_it_clustered,
     geom_vline(xintercept = number_of_clusters, color="red", linetype="dashed") +
     labs(x="Number of clusters",
          y="WSS",
-         title="Total Within Sum Squared error")
+         title="Total Within-group Sum of Squared distance")
   
   
 }
@@ -217,21 +215,23 @@ cluster_profile <- function(dataframe_for_plot, plot_according_to,
     
     camp.sarah  <- feat_camp %>% 
       filter(gene_name %in% campylobacter_preselection$gene_name) %>% 
-      left_join(campylobacter_preselection, by="gene_name")
+      left_join(campylobacter_preselection, by="gene_name") %>% 
+      mutate(clone_candidate = if_else(is.na(`clone?`), "Not", "yes"))
       
     
     ggplot() +
       geom_line(aes(x=Condition, y=logFC, group=gene_name), data = feat_camp,
                 colour=alpha("grey", 0.5)) +
-      geom_line(aes(x=Condition, y=logFC, group=gene_name, color=`clone?`), 
+      geom_line(aes(x=Condition, y=logFC, group=gene_name, color=clone_candidate),
                 data=camp.sarah) +
       geom_text(aes(x=Condition, y=logFC + 0.2, label=gene),
                 data = camp.sarah %>% filter(Condition=="Vic"),
                 size=1.8) +
       theme(axis.text.x = element_text(angle = 90),
             legend.position = "none") +
+      scale_color_brewer(palette = "Dark2") +
       facet_wrap(~cluster) +
-      ggtitle("CDS logFC by cluster", subtitle = "Genes of interest")
+      ggtitle("CDS logFC by cluster", subtitle = "Genes of interest are green. Genes for cloning are brown")
     
   }
 }
@@ -296,7 +296,8 @@ cluster_table <- function(dataframe_for_info, which_cluster, distance_matrix,
       mutate("Prototype" = if_else(gene_name %in% gprototypes$gene_name, "Prototype", ""))
   }
   
-  g_feat
+  g_feat %>% 
+    select(-c(species_max_distance,species_avg_distance))
 }
 
 

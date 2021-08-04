@@ -32,7 +32,7 @@ cluster_counts <- function(what_to_cluster, distance_metric, how_to_cluster, log
 }
 
 # Columns must be genes genes!!
-correlated_distance <- function(X, method=c("cosine", "pearson"), expect_neg_distance=FALSE){
+correlated_distance <- function(X, method=c("cosine", "pearson", "spearman"), expect_neg_distance=FALSE){
   
   if(method=="cosine"){
     X.t <- t(X) # Rows are genes
@@ -161,8 +161,10 @@ cluster_longform <- function(how_to_cluster, number_of_clusters, clustered_objec
 }
 
 
-cluster_profile <- function(dataframe_for_plot, plot_according_to,
-                            salmonella_preselection, campylobacter_preselection){
+cluster_profile <- function(dataframe_for_plot, plot_according_to, features_df){
+  dataframe_for_plot <- dataframe_for_plot %>% 
+    left_join(features_df, by="gene_name")
+  
   if(plot_according_to == 'organism'){
     feat_campy <- dataframe_for_plot %>% filter(organism=="Campylobacter")
     feat_salm <- dataframe_for_plot %>% filter(organism=="Salmonella")
@@ -193,8 +195,7 @@ cluster_profile <- function(dataframe_for_plot, plot_according_to,
   }else if(plot_according_to == "Salmonella pre-selection"){
     feat_salm <- dataframe_for_plot %>% filter(organism=="Salmonella")
     salm.sussane <- feat_salm %>% 
-      filter(gene_name %in% salmonella_preselection$gene_name) %>% 
-      left_join(salmonella_preselection, by="gene_name")
+      filter(pre.selected == "pre.selected")
     
     ggplot() +
       geom_line(aes(x=Condition, y=logFC, group=gene_name), data = feat_salm,
@@ -214,17 +215,15 @@ cluster_profile <- function(dataframe_for_plot, plot_according_to,
       filter(organism=="Campylobacter")
     
     camp.sarah  <- feat_camp %>% 
-      filter(gene_name %in% campylobacter_preselection$gene_name) %>% 
-      left_join(campylobacter_preselection, by="gene_name") %>% 
-      mutate(clone_candidate = if_else(is.na(`clone?`), "Not", "yes"))
+      filter(pre.selected == "pre.selected")
       
     
     ggplot() +
       geom_line(aes(x=Condition, y=logFC, group=gene_name), data = feat_camp,
                 colour=alpha("grey", 0.5)) +
-      geom_line(aes(x=Condition, y=logFC, group=gene_name, color=clone_candidate),
+      geom_line(aes(x=Condition, y=logFC, group=gene_name, color=clone),
                 data=camp.sarah) +
-      geom_text(aes(x=Condition, y=logFC + 0.2, label=gene),
+      geom_text(aes(x=Condition, y=logFC + 0.2, label=symbol),
                 data = camp.sarah %>% filter(Condition=="Vic"),
                 size=1.8) +
       theme(axis.text.x = element_text(angle = 90),
@@ -233,7 +232,29 @@ cluster_profile <- function(dataframe_for_plot, plot_according_to,
       facet_wrap(~cluster) +
       ggtitle("CDS logFC by cluster", subtitle = "Genes of interest are green. Genes for cloning are brown")
     
+  }else if(plot_according_to == "Transcription Factors"){
+    tf_data_campy <- dataframe_for_plot %>% 
+      filter(regulator_general == "TF" & organism == "Campylobacter")
+    tf_data_salm <- dataframe_for_plot %>% 
+      filter(regulator_general == "TF" & organism == "Salmonella")
+    non_tf <- dataframe_for_plot %>% 
+      filter(is.na(regulator_general))
+    
+    
+    ggplot() +
+      geom_line(aes(x=Condition, y=logFC, group=gene_name), data=non_tf,
+                colour=alpha("grey", 0.7)) +
+      geom_line(aes(x=Condition, y=logFC, group=gene_name), data=tf_data_salm,
+                colour=alpha("#d95f02", 0.7)) +
+      geom_line(aes(x=Condition, y=logFC, group=gene_name), data=tf_data_campy,
+                colour=alpha("#1b9e77", 0.7)) +
+      theme(axis.text.x = element_text(angle = 90),
+           legend.position = "none") +
+      facet_wrap(~cluster) +
+      ggtitle("CDS logFC by cluster", subtitle = "Salmonella TFs are orange\nCampylobacter TFs are green")
+    
   }
+  
 }
 
 
@@ -268,8 +289,6 @@ focused_profile <- function(which_organism, which_cluster, which_gene,
 
 cluster_table <- function(dataframe_for_info, which_cluster, distance_matrix,
                           genomic_features_dataframe,
-                          salmonella_preselection,
-                          campylobacter_preselection,
                           average_expression_information,
                           how_to_cluster){
   
@@ -285,7 +304,6 @@ cluster_table <- function(dataframe_for_info, which_cluster, distance_matrix,
   
   g_feat <- genomic_features_dataframe %>% 
     filter(gene_name %in% cluster_members$gene_name) %>% 
-    mutate("Pre-selected"=if_else((gene_name %in% salmonella_preselection$gene_name) | (gene_name %in% campylobacter_preselection$gene_name), "Pre-selected", "")) %>%
     left_join(representative_info, by="gene_name") %>% 
     left_join(average_expression_information, by="gene_name")
   

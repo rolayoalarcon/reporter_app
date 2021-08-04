@@ -42,7 +42,8 @@ ui <- fluidPage(title = "Choosing gene expression",
                                            choices = list("organism", 
                                                           "prototype (if minmax is used)",
                                                           "Salmonella pre-selection",
-                                                          "Campylobacter pre-selection"))
+                                                          "Campylobacter pre-selection",
+                                                          "Transcription Factors"))
                              ),
                              mainPanel(plotOutput("cluster_wrap_cds"),
                                        br(),
@@ -64,7 +65,7 @@ ui <- fluidPage(title = "Choosing gene expression",
                                        br(),
                                        br(),
                                        br(),
-                                       br()),
+                                       br())
                            ),
                            sidebarLayout(
                              sidebarPanel(numericInput(inputId = "cluster_interest_cds",
@@ -149,14 +150,14 @@ ui <- fluidPage(title = "Choosing gene expression",
 # Since we only really need to import this once, we can leave it outside of
 # the server function. The data I call here was performed with clustering_usw
 
-cds_log.fc <- read_tsv("shiny_data/cds_logFC.tsv") %>% 
+cds_log.fc <- read_tsv("shiny_data/cds_logFC.tsv.gz") %>% 
   column_to_rownames("gene_name")
 
-srna_log.fc <- read_tsv("shiny_data/srna_logFC.tsv") %>% 
+srna_log.fc <- read_tsv("shiny_data/srna_logFC.tsv.gz") %>% 
   column_to_rownames("gene_name")
 
 # Some average expression info
-joint_cds.avg <- read_tsv("shiny_data/joint_cds_avg.tsv") %>% 
+joint_cds.avg <- read_tsv("shiny_data/joint_cds_avg.tsv.gz") %>% 
   column_to_rownames("gene_name")
 
 cds_rowmeans <- rowMeans(joint_cds.avg)
@@ -164,7 +165,7 @@ cds_avgExp <- data.frame("gene_name"=names(cds_rowmeans),
                          "Average_Expression"=cds_rowmeans)
 
 
-joint_srna.avg <- read_tsv("shiny_data/joint_srna_avg.tsv") %>% 
+joint_srna.avg <- read_tsv("shiny_data/joint_srna_avg.tsv.gz") %>% 
   column_to_rownames("gene_name")
 
 srna_rowmeans <- rowMeans(joint_srna.avg)
@@ -172,34 +173,7 @@ srna_avgExp <- data.frame("gene_name"=names(srna_rowmeans),
                          "Average_Expression"=srna_rowmeans)
 
 # Genomic features
-salm_features <- read_tsv("shiny_data/merged_features_salmonella.tsv") %>% 
-  mutate(organism="Salmonella",
-         gene_name=paste0(locus_tag, "-Salmonella")) %>% 
-  select(gene_name, locus_tag, symbol, name)
-
-camp_features <- read_tsv("shiny_data/merged_features_campylobacter.tsv") %>% 
-  mutate(organism="Campylobacter",
-         gene_name=paste0(locus_tag, "-Campylobacter")) %>% 
-  select(gene_name, locus_tag, symbol, name)
-
-genomic_features <- bind_rows(salm_features, camp_features)
-
-
-# Some pre-selected features for genes
-salm.preselection <- read_tsv("shiny_data/pre_selected_salmonella.txt") %>% 
-  rename("symbol"=ID) %>% 
-  left_join(salm_features, by="symbol") %>% 
-  filter(!is.na(locus_tag)) %>% 
-  mutate(gene_name = paste0(locus_tag, "-Salmonella"))%>% 
-  select(gene_name, symbol)
-
-camp.preselection <- read_excel("shiny_data/Campy regulators and stress resp for Roberto.xlsx") %>% 
-  rename("locus_tag" = `Locus tag 81-176`) %>% 
-  left_join(camp_features, by="locus_tag") %>% 
-  mutate(gene_name = paste0(locus_tag, "-Campylobacter")) %>% 
-  select(gene_name, gene, `clone?`)
-
-
+genomic_features <- read_tsv("shiny_data/genomic_features.tsv.gz")
 
 # Here we start our app
 
@@ -342,16 +316,14 @@ server <- function(input, output){
   output$cluster_wrap_cds <- renderPlot({
     cluster_profile(dataframe_for_plot = cluster_info_cds(), 
                     plot_according_to = input$color_by_cds,
-                    salmonella_preselection = salm.preselection, 
-                    campylobacter_preselection = camp.preselection)
+                    features_df = genomic_features)
   }, height = 750)
   
   ## sRNA
   output$cluster_wrap_srna <- renderPlot({
     cluster_profile(dataframe_for_plot = cluster_info_srna(), 
                     plot_according_to = input$color_by_srna,
-                    salmonella_preselection = salm.preselection, 
-                    campylobacter_preselection = camp.preselection)
+                    features_df = genomic_features)
   })
   
   # Focused Data Parameters
@@ -409,8 +381,6 @@ server <- function(input, output){
                   which_cluster = focus_parameters_cds$c_focus, 
                   distance_matrix = clust_cds()$distance_matrix,
                   genomic_features_dataframe = genomic_features,
-                  salmonella_preselection = salm.preselection,
-                  campylobacter_preselection = camp.preselection,
                   average_expression_information = cds_avgExp,
                   how_to_cluster = clustering_parameters_cds$c_method)
     
@@ -422,8 +392,6 @@ server <- function(input, output){
                   which_cluster = focus_parameters_srna$c_focus, 
                   distance_matrix = clust_srna()$distance_matrix,
                   genomic_features_dataframe = genomic_features,
-                  salmonella_preselection = salm.preselection,
-                  campylobacter_preselection = camp.preselection,
                   average_expression_information = srna_avgExp,
                   how_to_cluster = clustering_parameters_srna$c_method)
   })

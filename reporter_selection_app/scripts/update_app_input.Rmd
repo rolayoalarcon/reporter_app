@@ -1,0 +1,223 @@
+---
+title: "update_input"
+author: "Roberto Olayo"
+date: "8/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+# Update Expression Data
+
+```{r}
+clean_colname <- function(cname, prefix){
+  remove_pre <- gsub(prefix, "", cname)
+  remove_pos <- gsub(".sorted.bam", "", remove_pre)
+  
+  return(remove_pos)
+}
+
+read_cmatrix <- function(file, column_extra){
+  cmatrix <- read.table(file, row.names = 1)
+  cmatrix$locus_tag <- row.names(cmatrix)
+  cmatrix <- as_tibble(cmatrix) %>% 
+    rename_with(~clean_colname(cname=.x, prefix=column_extra))
+  return(cmatrix)
+}
+
+salm_rlog <- read_cmatrix("../../salmonella_pathogenex/data/counts/vst_counts.tsv", "P13116_1005_S5_L001_R1_001_SALMT_") %>% 
+  mutate(locus_organism=paste0(locus_tag, "-Salmonella"))
+
+camp_rlog <- read_cmatrix("../../cjejuni_pathogenex/data/counts/vst_counts.tsv", "P11102_1004_S4_L001_R1_001_CAMPY_") %>% 
+  mutate(locus_organism=paste0(locus_tag, "-Campylobacter")) %>% 
+  select(-c(Nd1_1, Nd1_2, Nd1_3))
+
+gather_expression <- function(count.df, annot.df, desired_labels){
+  relevant_locus <- annot.df %>% 
+    filter(`# feature` %in% desired_labels) %>% 
+    select(locus_tag)
+  
+  
+  relevant_info <- count.df %>% 
+    filter(locus_tag %in% relevant_locus$locus_tag) %>% 
+    column_to_rownames(var="locus_organism") %>% 
+    select(-locus_tag)
+  
+  return(relevant_info)
+}
+
+salm_features <- read_tsv("../../salmonella_pathogenex/data/genome_info/GCF_000210855.2_ASM21085v2/merged_features.tsv") %>% 
+  mutate(organism="Salmonella",
+         gene_name=paste0(locus_tag, "-Salmonella")) %>% 
+  select(-GeneID)
+
+camp_features <- read_tsv("../../cjejuni_pathogenex/data/genome_info/GCF_000015525.1_ASM1552v1/merged_features.tsv") %>% 
+  mutate(organism="Campylobacter",
+         gene_name=paste0(locus_tag, "-Campylobacter")) %>% 
+  select(-GeneID)
+
+genomic_features <- bind_rows(salm_features, camp_features) %>% 
+  select(gene_name, locus_tag, symbol, name)
+
+# Joining CDS information
+camp_cds <- gather_expression(camp_rlog, camp_features, c("CDS"))
+salm_cds <- gather_expression(salm_rlog, salm_features, c("CDS"))
+
+joint_cds <- bind_rows(list(camp_cds, salm_cds))
+
+
+
+# Joining sRNA information
+camp_srna <- gather_expression(camp_rlog, camp_features, c("sRNA", "sRNA_candidate"))
+salm_srna <- gather_expression(salm_rlog, salm_features, c("sRNA"))
+
+joint_srna <- bind_rows(camp_srna, salm_srna)
+```
+
+
+### Averaging replicates
+```{r}
+average_replicates <- function(expression.df){
+  unique_conditions <- unique(sapply(colnames(expression.df), function(x){strsplit(x, "_")[[1]][1]}))
+  
+  avg.df <- sapply(unique_conditions, 
+                  function(x){rowMeans(expression.df[grep(x, colnames(expression.df))])})
+}
+
+joint_cds.avg <- as.data.frame(average_replicates(joint_cds))
+joint_srna.avg <- as.data.frame(average_replicates(joint_srna))
+
+joint_srna.avg$gene_name <- row.names(joint_srna.avg)
+joint_cds.avg$gene_name <- row.names(joint_cds.avg)
+```
+
+```{r}
+write_tsv(joint_cds.avg, "../shiny_data/joint_cds_avg.tsv.gz")
+write_tsv(joint_srna.avg, "../shiny_data/joint_srna_avg.tsv.gz")
+```
+
+
+
+Getting log Fold Changes 
+```{r}
+srna_rlog.fc <- as_tibble(joint_srna.avg) %>% 
+  relocate(Ctrl, .after = last_col()) %>% 
+  mutate_at(vars(-matches('gene_name')), ~ . - Ctrl) %>% 
+  relocate(Ctrl, 1) %>% 
+  column_to_rownames("gene_name")
+
+cds_rlog.fc <- as_tibble(joint_cds.avg) %>% 
+  relocate(Ctrl, .after = last_col()) %>% 
+  mutate_at(vars(-matches('gene_name')), ~ . - Ctrl) %>% 
+  relocate(Ctrl, 1) %>% 
+  column_to_rownames("gene_name")
+```
+
+```{r}
+cds_rlog.fc %>% 
+  rownames_to_column("gene_name") %>% 
+  write_tsv("../shiny_data/cds_logFC.tsv.gz")
+
+srna_rlog.fc %>% 
+  rownames_to_column("gene_name") %>% 
+  write_tsv("../shiny_data/srna_logFC.tsv.gz")
+```
+
+# Assinging TF 
+
+```{r}
+campy_tf <- read_tsv("../../cjejuni_pathogenex/data/genome_info/GCF_000015525.1_ASM1552v1/transcription_factors_parsed.tsv") %>% 
+  select(locus_tag, regulator_specific, regulator_general)
+salm_tf <- read_tsv("../../salmonella_pathogenex/data/genome_info/GCF_000210855.2_ASM21085v2/transcription_factors_parsed.tsv") %>% 
+  select(locus_tag, regulator_specific, regulator_general)
+transcription_factors <- bind_rows(campy_tf, salm_tf)
+```
+
+
+
+
+
+```{r}
+genomic_features <- genomic_features %>% 
+  left_join(transcription_factors, by="locus_tag")
+```
+
+# Add the Cje homologs
+```{r}
+cje_cjj_bbh <- read_tsv("../../rbh_blastp/rbh_dataframes/cpath_vs_cnfcore.tsv") %>% 
+  select(query_x, subject_x) %>% 
+  rename(locus_tag=query_x,
+         cje_loctag=subject_x)
+cje_cjj_bbh
+```
+
+```{r}
+genomic_features <- genomic_features %>% 
+  left_join(cje_cjj_bbh, by="locus_tag")
+```
+
+# Add the preselected info
+## SAlmonella
+```{r}
+salmonella_preselection <- read_tsv("../shiny_data/pre_selected_salmonella.txt") %>% 
+  mutate(pre.selected = "pre.selected",
+         symbol_match = str_to_lower(ID)) %>% 
+  select(symbol_match, pre.selected)
+salmonella_preselection
+```
+
+```{r}
+genomic_features <- genomic_features %>% 
+  mutate(symbol_match = str_to_lower(symbol)) %>% 
+  left_join(salmonella_preselection, by="symbol_match") %>% 
+  select(-symbol_match)
+```
+
+## Campylobacter
+```{r}
+campy_preselection <- readxl::read_excel("../shiny_data/Campy regulators and stress resp for Roberto.xlsx") %>% 
+  select(`RS#`, `clone?`) %>% 
+  rename(locus_tag=`RS#`,
+         clone=`clone?`)
+campy_preselection
+```
+```{r}
+genomic_features <- genomic_features %>% 
+  mutate(pre.selected = if_else(locus_tag %in% campy_preselection$locus_tag, "pre.selected", pre.selected)) %>% 
+  left_join(campy_preselection, by="locus_tag")
+```
+
+```{r}
+cjj_sey <- read_tsv("../../rbh_blastp/rbh_dataframes/cpath_vs_spath.tsv")
+cjj_ref <- cjj_sey %>% 
+  select(query_x, subject_x) %>% 
+  rename(locus_tag=query_x,
+         bbh=subject_x)
+
+sey_ref <- cjj_sey %>% 
+  select(query_y, subject_y) %>% 
+  rename(locus_tag=query_y,
+         bbh=subject_y)
+
+
+org_bbh <- bind_rows(sey_ref, cjj_ref)
+
+genomic_features <- genomic_features %>% 
+  left_join(org_bbh, by="locus_tag")
+```
+
+
+
+
+```{r}
+write_tsv(genomic_features, "../shiny_data/genomic_features.tsv.gz")
+```
+
+
+
+
+
+
+

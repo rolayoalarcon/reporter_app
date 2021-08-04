@@ -7,7 +7,7 @@ output: html_document
 
 # A tool to visualize clustering results together  
 So, I think we can benefit by looking at the data together. For that purpose, I have created this little app so that we can all easily perform clustering and look at the results.  
-Here is a small tutorial on how to use it. I will also include just a little bit of my recommendations and observations
+Here is a small tutorial on how to use it. I will also include just a little bit of my recommendations and observations.
 
 ## How do I use this?  
 This is a shiny app built with R. I think the easiest way in which we can all use this is the following:  
